@@ -32,9 +32,8 @@ vector<uint64_t> read( const string &fname){
 
   int count=0;
   while(true){
-    count++;
     if( ret.size() % block_size == 0 ){
-      cerr<<"count "<<count<<endl;
+      cerr<<"count "<<count++<<endl;
       parts.emplace_back( move(ret));
       auto vv = --(parts.end());
       auto f = [=](){ __gnu_parallel::sort(vv->begin(), vv->end() );};
@@ -95,7 +94,7 @@ struct BinarySearch{
 struct BitVec{
   vector<bool> vec;
   BitVec( const vector<uint64_t> &v){
-    uint64_t high = 3'000'000'000;
+    uint64_t high = max_phone_number;
     vec.resize(high);
     for( auto val : v){
       vec[val]=1;
