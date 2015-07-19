@@ -13,12 +13,12 @@
 #include <list>
 
 using namespace std;
-vector<uint32_t> read( const string &fname){
-  vector<uint32_t> ret;
+vector<uint64_t> read( const string &fname){
+  vector<uint64_t> ret;
   ret.reserve(20'000'000);
 
   list<future<void>> lst;
-  list<vector<uint32_t>> parts;
+  list<vector<uint64_t>> parts;
 
   ifstream file(fname);
 
@@ -37,10 +37,10 @@ vector<uint32_t> read( const string &fname){
       auto f = [=](){ __gnu_parallel::sort(vv->begin(), vv->end() );};
       lst.emplace_back( async( launch::async, f));
 
-      ret=vector<uint32_t>();
+      ret=vector<uint64_t>();
       ret.reserve(20'000'000);
     }
-    uint32_t val;
+    uint64_t val;
     file>>val;
     if( ! file.good() ){
       break;
@@ -64,7 +64,7 @@ vector<uint32_t> read( const string &fname){
     auto v2 = parts.front();
     parts.pop_front();
 
-    vector<uint32_t> m;
+    vector<uint64_t> m;
     m.resize( v1.size() + v2.size() );
 
     __gnu_parallel::merge( v1.begin(), v1.end(), v2.begin(), v2.end(), m.begin());
@@ -75,15 +75,15 @@ vector<uint32_t> read( const string &fname){
 }
 
 struct BinarySearch{
-  const vector<uint32_t> &vec;
-  vector<uint32_t>::const_iterator beg,end;
-  BinarySearch( const vector<uint32_t> &v): vec(v)
+  const vector<uint64_t> &vec;
+  vector<uint64_t>::const_iterator beg,end;
+  BinarySearch( const vector<uint64_t> &v): vec(v)
   {
     beg = vec.begin();
     end = vec.begin();
   }
 
-  bool operator()(uint32_t val){
+  bool operator()(uint64_t val){
     auto ret = std::binary_search( vec.begin(), vec.end(), val);
     return ret;
   }
@@ -91,41 +91,41 @@ struct BinarySearch{
 
 struct BitVec{
   vector<bool> vec;
-  BitVec( const vector<uint32_t> &v){
-    uint32_t high = 3'000'000'000;
+  BitVec( const vector<uint64_t> &v){
+    uint64_t high = 3'000'000'000;
     vec.resize(high);
     for( auto val : v){
       vec[val]=1;
     }
   }
 
-  bool operator()( uint32_t val ){
+  bool operator()( uint64_t val ){
     return vec[val];
   }
 };
 
 struct Unordered{
-  std::unordered_set<uint32_t> set;
-  Unordered( const vector<uint32_t> &v ){
+  std::unordered_set<uint64_t> set;
+  Unordered( const vector<uint64_t> &v ){
     set.reserve( v.size()*1.3 );
     for( auto val: v){
       set.insert(val);
     }
   }
 
-  bool operator()(uint32_t val){
+  bool operator()(uint64_t val){
     return set.find(val) != set.end();
   }
 };
 
 
-vector<uint32_t> getTests( const vector<uint32_t> &v, double p){
-  vector<uint32_t> ret;
+vector<uint64_t> getTests( const vector<uint64_t> &v, double p){
+  vector<uint64_t> ret;
   size_t testSize = 1'000'000;
   std::mt19937_64 mer;
   ret.reserve(testSize);
 
-  std::uniform_int_distribution<uint32_t>bot_distro(0,2'999'999'999);
+  std::uniform_int_distribution<uint64_t>bot_distro(0,2'999'999'999);
   std::uniform_real_distribution<double>fdistro(0,1);
   std::uniform_real_distribution<double>select_distro(0,v.size());
   for( size_t i=0; i<testSize; i++){
@@ -145,7 +145,7 @@ struct testRet{
 };
 
 template<typename T>
-testRet doTests( T search, vector<uint32_t> tests){
+testRet doTests( T search, vector<uint64_t> tests){
   testRet ret={0.0,0};
   Timer t;
   t.start();
@@ -161,12 +161,12 @@ testRet doTests( T search, vector<uint32_t> tests){
 int main(){
   Timer read_time;
   read_time.start();
-  vector<uint32_t> v = read("dump");
+  vector<uint64_t> v = read("dump");
   read_time.stop();
   cout<<"read_time: "<<read_time.getTime()<<endl;
 
 
-  vector<uint32_t> tests = getTests( v, 0.05);
+  vector<uint64_t> tests = getTests( v, 0.05);
   testRet t1,t2;
   {
     cerr<<"building binary"<<endl;
