@@ -8,7 +8,7 @@ LFLAGS= -g $(STD) $(OFLAGS) -fopenmp
 
 .PHONY:clean 
 
-Objects= main.o
+Objects= main.o Timer.o
 
 all : $(Objects) program gen
 

@@ -16,9 +16,9 @@ using namespace std;
 //output will be in the range of 0 billion to (3 billion-1)
 //corespoiding to starting with a 7,8,or 9 respectivly
 template<typename T>
-uint32_t generateNumber( T &r ){
-  std::uniform_int_distribution<uint32_t>bot_distro(0,2999999999);
-  const uint32_t ret = bot_distro(r);
+uint64_t generateNumber( T &r ){
+  std::uniform_int_distribution<uint64_t>bot_distro(0,9'999'999'999);
+  const uint64_t ret = bot_distro(r);
   return ret;
 }
 int main(){
@@ -32,7 +32,7 @@ int main(){
     mer[i].seed(i);
   }
 
-  vector<uint32_t> v;
+  vector<uint64_t> v;
 
   size_t size = 600'000'000;
   v.resize(size);
