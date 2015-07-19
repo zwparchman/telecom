@@ -12,10 +12,13 @@
 #include "Timer.h"
 #include <list>
 
+const uint64_t max_phone_number=9'999'999'999;
+
 using namespace std;
 vector<uint64_t> read( const string &fname){
   vector<uint64_t> ret;
-  ret.reserve(20'000'000);
+  const int block_size=20'000'000;
+  ret.reserve(block_size);
 
   list<future<void>> lst;
   list<vector<uint64_t>> parts;
@@ -30,7 +33,7 @@ vector<uint64_t> read( const string &fname){
   int count=0;
   while(true){
     count++;
-    if( ret.size() % 20'000'000 == 0 ){
+    if( ret.size() % block_size == 0 ){
       cerr<<"count "<<count<<endl;
       parts.emplace_back( move(ret));
       auto vv = --(parts.end());
@@ -38,7 +41,7 @@ vector<uint64_t> read( const string &fname){
       lst.emplace_back( async( launch::async, f));
 
       ret=vector<uint64_t>();
-      ret.reserve(20'000'000);
+      ret.reserve(block_size);
     }
     uint64_t val;
     file>>val;
@@ -125,7 +128,7 @@ vector<uint64_t> getTests( const vector<uint64_t> &v, double p){
   std::mt19937_64 mer;
   ret.reserve(testSize);
 
-  std::uniform_int_distribution<uint64_t>bot_distro(0,2'999'999'999);
+  std::uniform_int_distribution<uint64_t>bot_distro(0,max_phone_number);
   std::uniform_real_distribution<double>fdistro(0,1);
   std::uniform_real_distribution<double>select_distro(0,v.size());
   for( size_t i=0; i<testSize; i++){
