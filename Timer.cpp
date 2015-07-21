@@ -10,6 +10,7 @@ void Timer::start(){
 
 void Timer::stop(){
   end_time = steady_clock::now() ;
+  running=false;
 }
 
 void Timer::reset(){
@@ -22,7 +23,7 @@ long int Timer::getMicroTime(){
   //duration<std::chrono::microseconds> time_span ;
   long int time_span;
   if( running ){
-    time_span = duration_cast<std::chrono::microseconds>(end_time-start_time).count();
+    time_span = duration_cast<std::chrono::microseconds>(steady_clock::now()-start_time).count();
   } else {
     time_span = duration_cast<std::chrono::microseconds>(end_time-start_time).count();
   }
