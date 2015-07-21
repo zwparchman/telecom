@@ -21,8 +21,12 @@ uint64_t generateNumber( T &r ){
   const uint64_t ret = bot_distro(r);
   return ret;
 }
-int main(){
+int main(int argc, char* argv[] ){
 
+  size_t size=600'000'000;
+  if(argc == 2 ){
+    size=atoi(argv[1]);
+  }
 
   // obtain a seed from the system clock:
   //unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -34,7 +38,6 @@ int main(){
 
   vector<uint64_t> v;
 
-  size_t size = 600'000'000;
   v.resize(size);
 
 #pragma openmp parallel for numthreads(8)
