@@ -1,20 +1,76 @@
-#include <fstream>
-#include <iostream>
 #include <algorithm>
-#include <thread>
-#include <string>
-#include <unordered_set>
-#include "Timer.h"
+#include <boost/iostreams/device/mapped_file.hpp>
+#include <ctype.h>
+#include <exception>
+#include <fstream>
+#include <future>
+#include <iomanip>
+#include <iostream>
 #include <list>
-#include "uvector.h"
 #include <mutex>
+#include "omp.h"
 #include <parallel/algorithm>
-#include <omp.h>
+#include <stdlib.h>
+#include <string>
+#include <thread>
+#include "Timer.h"
+#include <unordered_set>
+#include "uvector.h"
+#include <vector>
 
 const uint64_t max_phone_number=9'999'999'999;
 
 using namespace std;
 using ao::uvector;
+
+
+
+using namespace std;
+using ao::uvector;
+
+
+static inline uint64_t naive(const char *p, char const ** out) {
+#if 1
+  uint64_t ret=0;
+  char const *cur;
+
+  for( cur=p; isspace(*cur); cur++){}
+
+#if 0
+  for( ; isdigit(*cur); cur++){
+#else
+  for( ; *cur>='0' && *cur<='9';  cur++){
+#endif
+    ret = ret * 10 + ( *cur -'0' );
+  }
+
+  *out=cur;
+
+  return ret;
+#else
+    return strtol(p, const_cast<char **>(out) ,10);
+#endif
+}
+
+uvector<uint64_t> fun (char const * const beg, char const * const end ){
+  uvector<uint64_t> ret;
+  ret.reserve( (end - beg )/6.0); //best guess at size
+  char const * cur = beg;
+  while( cur < end ){
+    __builtin_prefetch(cur+32);
+    char const * next;
+    uint64_t val = naive(cur, &next);
+    if( cur == end -2){ break;}
+    if( cur == next ){
+      cerr<<(void*)cur<<" "<<(void*)end<<" err in strtol"<<endl;
+      cur++;
+    } else {
+      cur = next;
+      ret.push_back(val);
+    }
+  }
+  return ret;
+}
 
 struct Merger{
   list<uvector<uint64_t>>vecs;
@@ -74,7 +130,6 @@ struct Merger{
   }
 
   static void work(Merger *self){
-    omp_set_num_threads(4);
     int progress=0;
     while( !self->finished){
       progress += trysort(self);
@@ -133,35 +188,52 @@ struct Merger{
 
 uvector<uint64_t> read( const string &fname){
   uvector<uint64_t> ret;
-  const int block_size=2'000'000;
-  ret.reserve(block_size);
 
-  ifstream file(fname);
+  Timer total_t;
+  total_t.start();
 
-  if( !file ){
-    cerr<<"bad file\n";
-    exit(4);
-  }
+  boost::iostreams::mapped_file file(fname);
+
+  list<future< uvector<uint64_t>> > lst;
+
+  auto cur = file.data();
+  auto end = cur + file.size();
+  size_t chunckSize= ( end - cur ) / 8;
 
   Merger mer;
-  int count=0;
-  while(true){
-    if( ret.size() % block_size == 0 ){
-      cerr<<"count "<<count++<<endl;
-      mer.add(move(ret));
-
-      ret=uvector<uint64_t>();
-      ret.reserve(block_size);
+  while( cur < end ){
+    auto chunckEnd = cur + chunckSize;
+    if( chunckEnd > end ){
+      chunckEnd = end;
     }
-    uint64_t val;
-    file>>val;
-    if( ! file.good() ){
+    for( ; *chunckEnd != '\n'; chunckEnd -- ){};
+    bool good=false;
+    for( size_t i=0; i < (size_t)(end - chunckEnd); i++){
+      if(! isspace(chunckEnd[i])){
+        good=true;
+        break;
+      }
+    }
+    if( good ){
+      try{
+          lst.emplace_back( async( launch::async , fun, cur, chunckEnd));
+      } catch( std::exception &e ){
+        cerr<<e.what()<<" -- at byte "<<cur - file.data()<<endl;
+      }
+    } else { 
       break;
-    } 
-    ret.emplace_back(val);
+    }
+    cur = chunckEnd;
   }
 
-  mer.end();
+  for( auto &f: lst){
+    mer.add( f.get() );
+  }
+  total_t.stop();
+
+  cout<<endl;
+  cout<< setw(10) << "total_t "<< setw(10) << total_t.getTime() << endl;
+
   return mer.get();
 }
 
@@ -186,7 +258,6 @@ struct BitVec{
     uint64_t high = max_phone_number;
     vec.resize(high);
 
-    omp_set_num_threads(8);
 #pragma omp parallel for 
     for( size_t i=0; i<v.size(); i++){
       vec[v[i]]=1;
