@@ -2,32 +2,139 @@
 #include <iostream>
 #include <algorithm>
 #include <thread>
-#include <memory>
-#include <stdint.h>
 #include <string>
-#include <stdlib.h>
 #include <unordered_set>
-#include <parallel/algorithm>
-#include <future>
 #include "Timer.h"
 #include <list>
 #include "uvector.h"
-
-
+#include <mutex>
+#include <parallel/algorithm>
+#include <omp.h>
 
 const uint64_t max_phone_number=9'999'999'999;
 
 using namespace std;
 using ao::uvector;
 
+struct Merger{
+  list<uvector<uint64_t>>vecs;
+  list<uvector<uint64_t>>sorted;
+  volatile bool finished;
+  mutex vecs_mutex;
+  mutex sorted_mutex;
+
+  thread *worker;
+
+  static int trymerge(Merger *self){
+    uvector<uint64_t> a;
+    uvector<uint64_t> b;
+    int ret=0;
+
+    self->sorted_mutex.lock();
+    if( self->sorted.size() >= 2 ){
+      ret=1;
+      a = move(self->sorted.front());
+      self->sorted.pop_front();
+      b = move(self->sorted.front());
+      self->sorted.pop_front();
+      self->sorted_mutex.unlock();
+
+      uvector<uint64_t> m;
+      m.resize( a.size() + b.size() );
+      __gnu_parallel::merge(a.begin(),a.end(), b.begin(),b.end(), m.begin());
+
+      self->sorted_mutex.lock();
+      self->sorted.emplace_back(move(m));
+      self->sorted_mutex.unlock();
+    } else {
+      self->sorted_mutex.unlock();
+    }
+    return ret;
+  }
+  static int trysort(Merger *self){
+    uvector<uint64_t> mine;
+    int ret=0;
+
+    self->vecs_mutex.lock();
+    if( self->vecs.size() >= 1 ){
+      ret=1;
+      mine = move(self->vecs.front());
+      self->vecs.pop_front();
+      self->vecs_mutex.unlock();
+
+      //sort then add to merge list
+      __gnu_parallel::sort(mine.begin(), mine.end());
+      self->sorted_mutex.lock();
+      self->sorted.emplace_front(move(mine));
+      self->sorted_mutex.unlock();
+    } else {
+      self->vecs_mutex.unlock();
+    }
+    return ret;
+  }
+
+  static void work(Merger *self){
+    omp_set_num_threads(4);
+    int progress=0;
+    while( !self->finished){
+      progress += trysort(self);
+      progress += trymerge(self);
+      if(self->finished && progress == 0){
+        self->vecs_mutex.lock();
+        self->sorted_mutex.lock();
+        bool con1=false;
+        bool con2=false;
+        con1 = 0== self->vecs.size();
+        con2 = 1!= self->sorted.size();
+        self->sorted_mutex.unlock();
+        self->vecs_mutex.unlock();
+        if( con1 || con2 ){
+          continue;
+        }
+        return;
+      }
+    }
+  }
+
+  Merger(){
+    finished=false;
+    worker = new thread(work,this);
+  }
+
+  void add( uvector<uint64_t> &&v){
+    uvector<uint64_t> myv = v;
+    if( myv.size() == 0 ){
+      return;
+    }
+    vecs_mutex.lock();
+    vecs.emplace_back(v);
+    vecs_mutex.unlock();
+  }
+  void end(){
+    finished=true;
+    worker->join();
+    delete worker;
+  }
+
+  uvector<uint64_t> get(){
+    if( !finished){
+      finished=true;
+      worker->join();
+      delete worker;
+    }
+    if( sorted.size() == 0 ){
+      uvector<uint64_t>ret;
+      ret.resize(0);
+      return move(ret);
+    }
+    return move(sorted.front());
+  }
+};
 
 uvector<uint64_t> read( const string &fname){
   uvector<uint64_t> ret;
-  const int block_size=20'000'000;
+  const int block_size=2'000'000;
   ret.reserve(block_size);
-
-  list<future<void>> lst;
-  list<uvector<uint64_t>> parts;
 
   ifstream file(fname);
 
@@ -36,14 +143,12 @@ uvector<uint64_t> read( const string &fname){
     exit(4);
   }
 
+  Merger mer;
   int count=0;
   while(true){
     if( ret.size() % block_size == 0 ){
       cerr<<"count "<<count++<<endl;
-      parts.emplace_back( move(ret));
-      auto vv = --(parts.end());
-      auto f = [=](){ __gnu_parallel::sort(vv->begin(), vv->end() );};
-      lst.emplace_back( async( launch::async, f));
+      mer.add(move(ret));
 
       ret=uvector<uint64_t>();
       ret.reserve(block_size);
@@ -56,30 +161,8 @@ uvector<uint64_t> read( const string &fname){
     ret.emplace_back(val);
   }
 
-  count=0;
-  for( auto &v : lst ){
-    cout<<"waiting on "<<count<<endl;
-    count++;
-    v.wait();
-  }
-
-  count=0;
-  while( parts.size() > 1 ){
-    cout<<"merge "<<count<<endl;
-    count++;
-    auto v1 = parts.front();
-    parts.pop_front();
-    auto v2 = parts.front();
-    parts.pop_front();
-
-    uvector<uint64_t> m;
-    m.resize( v1.size() + v2.size() );
-
-    __gnu_parallel::merge( v1.begin(), v1.end(), v2.begin(), v2.end(), m.begin());
-    parts.push_back( move(m));
-  }
-
-  return move( parts.front() );
+  mer.end();
+  return mer.get();
 }
 
 struct BinarySearch{
@@ -102,8 +185,11 @@ struct BitVec{
   BitVec( const uvector<uint64_t> &v){
     uint64_t high = max_phone_number;
     vec.resize(high);
-    for( auto val : v){
-      vec[val]=1;
+
+    omp_set_num_threads(8);
+#pragma omp parallel for 
+    for( size_t i=0; i<v.size(); i++){
+      vec[v[i]]=1;
     }
   }
 
@@ -116,7 +202,7 @@ struct Unordered{
   std::unordered_set<uint64_t> set;
   Unordered( const uvector<uint64_t> &v ){
     set.reserve( v.size()*1.3 );
-    for( auto val: v){
+    for( auto val : v){
       set.insert(val);
     }
   }
@@ -131,11 +217,15 @@ uvector<uint64_t> getTests( const uvector<uint64_t> &v, double p){
   uvector<uint64_t> ret;
   size_t testSize = 1'000'000;
   std::mt19937_64 mer;
+  mer.seed(4);
   ret.reserve(testSize);
 
   std::uniform_int_distribution<uint64_t>bot_distro(0,max_phone_number);
   std::uniform_real_distribution<double>fdistro(0,1);
   std::uniform_real_distribution<double>select_distro(0,v.size());
+  if( v.size() == 0 ){
+    p=-8;
+  }
   for( size_t i=0; i<testSize; i++){
     const double rd = fdistro(mer);
     if( rd < p ){
@@ -144,7 +234,7 @@ uvector<uint64_t> getTests( const uvector<uint64_t> &v, double p){
       ret.emplace_back(bot_distro(mer));
     }
   }
-  return ret;
+  return move(ret);
 }
 
 struct testRet{

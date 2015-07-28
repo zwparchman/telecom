@@ -7,8 +7,8 @@
 struct Timer{
   bool running;
 
-  std::chrono::steady_clock::time_point start_time;
-  std::chrono::steady_clock::time_point end_time;
+  std::chrono::high_resolution_clock::time_point start_time;
+  std::chrono::high_resolution_clock::time_point end_time;
 
   void start();
   void stop();
