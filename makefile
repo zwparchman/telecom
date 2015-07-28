@@ -12,10 +12,7 @@ PROG=./try2
 
 Objects= main.o Timer.o
 
-all : $(Objects) program gen raw eatram try2
-
-raw : $(Objects) raw.cpp
-	$(CC) raw.cpp $(LFLAGS) $(STD) -o raw -g -W -Wall -Wextra -Wshadow -fopenmp -march=native
+all : $(Objects) program gen eatram try2
 
 try2: test2.cpp
 	$(CC) $(STD) $(CFLAGS) test2.cpp Timer.cpp
@@ -58,4 +55,4 @@ clean:
 	rm -f program
 	rm -f c*grind\.out\.*
 	rm -f dump
-	rm -f gen try2 raw
+	rm -f gen try2 
