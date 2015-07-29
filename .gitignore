@@ -29,6 +29,19 @@
 dump
 gen
 program
+eatram
+real
+
+cachegrind.out.*
+dump*
+perf.data
+perf.data.old
+
+
 
 #vim stuff
 *.swp
+*.ycm*
+
+
+

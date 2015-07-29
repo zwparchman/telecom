@@ -36,7 +36,7 @@ static inline uint64_t naive(const char *p, char const ** out) {
 
   for( cur=p; isspace(*cur); cur++){}
 
-#if 0
+#if 1
   for( ; isdigit(*cur); cur++){
 #else
   for( ; *cur>='0' && *cur<='9';  cur++){
@@ -57,7 +57,9 @@ uvector<uint64_t> fun (char const * const beg, char const * const end ){
   ret.reserve( (end - beg )/6.0); //best guess at size
   char const * cur = beg;
   while( cur < end ){
+    __builtin_prefetch(cur);
     __builtin_prefetch(cur+32);
+    __builtin_prefetch(&ret[ret.size()]);
     char const * next;
     uint64_t val = naive(cur, &next);
     if( cur == end -2){ break;}
@@ -198,7 +200,7 @@ uvector<uint64_t> read( const string &fname){
 
   auto cur = file.data();
   auto end = cur + file.size();
-  size_t chunckSize= ( end - cur ) / 8;
+  size_t chunckSize= ( end - cur ) / 16;
 
   Merger mer;
   while( cur < end ){

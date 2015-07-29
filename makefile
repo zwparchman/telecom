@@ -1,4 +1,4 @@
-OFLAGS =  -Ofast
+OFLAGS =  
 CC=g++
 STD=-std=c++14
 CFLAGS= -g -c -W -Wall -Wextra $(STD) -Wno-missing-field-initializers -Wshadow \
@@ -12,16 +12,20 @@ PROG=./program
 
 Objects= main.o Timer.o
 
-all : $(Objects) program gen eatram 
+all : $(Objects) program gen eatram real
 
 eatram : eatram.cpp
 	g++ eatram.cpp -o eatram -O3 
 
 gen: ./generate.cpp
-	g++ generate.cpp -o gen -O3 -fopenmp --std=c++14
+	g++ generate.cpp -g -o gen -fopenmp --std=c++14
 
 program : $(Objects)
 	$(CC) $(Std) $(LFLAGS) $(Objects) -o program -lboost_iostreams
+
+real : real.cpp entry_pool.h
+	$(CC) $(CFLAGS) $<
+	$(CC) $(Std) $(LFLAGS) real.cpp Timer.cpp -o real -lboost_iostreams
 
 $(Objects): %.o: %.cpp
 	$(CC) $(CFLAGS) $<
