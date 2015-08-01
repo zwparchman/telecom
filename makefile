@@ -1,4 +1,4 @@
-OFLAGS =  
+OFLAGS =   -DNDEBUG -O3
 CC=g++
 STD=-std=c++14
 CFLAGS= -g -c -W -Wall -Wextra $(STD) -Wno-missing-field-initializers -Wshadow \
@@ -10,7 +10,7 @@ PROG=./program
 
 .PHONY:clean 
 
-Objects= main.o Timer.o
+Objects= main.o Timer.o entry_pool.o
 
 all : $(Objects) program gen eatram real
 
@@ -23,9 +23,11 @@ gen: ./generate.cpp
 program : $(Objects)
 	$(CC) $(Std) $(LFLAGS) $(Objects) -o program -lboost_iostreams
 
-real : real.cpp entry_pool.h
+real : real.o entry_pool.o Timer.o
+	$(CC) $(Std) $(LFLAGS) real.o Timer.o entry_pool.o -o real -lboost_iostreams
+
+real.o : real.cpp entry_pool.h 
 	$(CC) $(CFLAGS) $<
-	$(CC) $(Std) $(LFLAGS) real.cpp Timer.cpp -o real -lboost_iostreams
 
 $(Objects): %.o: %.cpp
 	$(CC) $(CFLAGS) $<
