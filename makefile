@@ -10,7 +10,7 @@ PROG=./program
 
 .PHONY:clean 
 
-Objects= main.o Timer.o entry_pool.o MappedFile.o
+Objects= Timer.o entry_pool.o MappedFile.o
 
 all : $(Objects) program gen eatram real
 
@@ -19,9 +19,6 @@ eatram : eatram.cpp
 
 gen: ./generate.cpp
 	g++ generate.cpp -g -o gen -fopenmp --std=c++14
-
-program : $(Objects)
-	$(CC) $(Std) $(LFLAGS) $(Objects) -o program -lboost_iostreams
 
 real : real.o entry_pool.o Timer.o MappedFile.o
 	$(CC) $(Std) $(LFLAGS) real.o Timer.o entry_pool.o MappedFile.o -o real -lboost_iostreams
