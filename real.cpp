@@ -20,18 +20,59 @@
 #include <unordered_set>
 #include "uvector.h"
 #include <vector>
-
-#if ZWP_USE_BOOST
-  #include <boost/iostreams/device/mapped_file.hpp>
-#else
-  #include "MappedFile.h"
-#endif
+#include "Channel.hpp"
+#include "MappedFile.h"
 
 
 const uint64_t max_phone_number=9'999'999'999;
 
 using namespace std;
 using ao::uvector;
+
+
+void compact( channel<entry_pool> *c, entry_pool *e ){
+  entry_pool a(0);
+
+  list<entry_pool> pools;
+
+  int count=0;
+
+  auto mergeStep = [&](){
+    if( pools.size() > 1){
+      entry_pool x = pools.front();
+      pools.pop_front();
+      entry_pool y = pools.front();
+      pools.pop_front();
+
+      entry_pool::merge(x,y);
+      cout<<"merge "<<++count<<endl;
+      pools.emplace_back(move(x));
+    }
+  };
+
+  while( c->size() || (!c->is_closed()) ){
+    /* empty the channel */
+    {
+      entry_pool b(0);
+      while( c->get(a,false)){
+        entry_pool::merge(b,a);
+      }
+      if( b.size() > 0){
+        pools.emplace_back(move(b));
+      }
+    }
+    mergeStep();
+  }
+
+  while( pools.size() > 1 ){
+    mergeStep();
+  }
+
+  *e = move(pools.front());
+
+  return;
+}
+
 
 
 template <typename T>
@@ -120,12 +161,8 @@ entry_pool fun (char const * const beg, char const * const end ){
     cur = temp+2;
     ret.add(phoneNumber, service, preferences, opstype, phonetype);
   }
-  ret.self_sort();
   return ret;
 }
-
-#if ! ZWP_USE_BOOST
-#endif 
 
 entry_pool read( const string &fname){
   uvector<uint64_t> ret;
@@ -136,11 +173,8 @@ entry_pool read( const string &fname){
 
   list<future<entry_pool> > futs;
 
-#if ZWP_USE_BOOST
-  boost::iostreams::mapped_file file(fname);
-#else
   MappedFile file (fname);
-#endif
+
   char const * cur = file.data();
   char const * const end = cur + file.size();
 
@@ -150,12 +184,13 @@ entry_pool read( const string &fname){
   for( ; *cur != '\n'; cur++);
   cur++;
 
-  list<entry_pool> pools;
-  future<entry_pool> merger;
+  entry_pool out(0);
+  channel<entry_pool> chan;
+  thread compact_thread( compact, &chan, &out);
+
 
   size_t maxRunning = 8;
 
-  int pairs=0;
   while( cur < end ){
     if( *cur == '\n' ){ cur++; continue;}
     char const * temp = cur + chunckSize;
@@ -168,18 +203,13 @@ entry_pool read( const string &fname){
       cerr<<"error temp==cur"<<endl;
       cur++;
     } else {
-      futs.push_back( async( launch::async, fun, cur, temp));
+      futs.emplace_back( async( launch::async, fun, cur, temp));
       cur=temp;
     }
     if( futs.size() >= maxRunning ){
       entry_pool a = futs.front().get();
       futs.pop_front();
-      entry_pool b = futs.front().get();
-      futs.pop_front();
-      cout<<"grabbed pair "<<pairs++<<endl;
-
-      entry_pool::merge(a,b);
-      pools.push_back(a);
+      chan.emplace( move(a) );
     }
   }
 
@@ -187,27 +217,19 @@ entry_pool read( const string &fname){
     cout<<"futs.size() "<<futs.size()<<endl;
     entry_pool a = futs.front().get();
     futs.pop_front();
-    pools.emplace_back( move(a) );
+    chan.emplace( move(a) );
   }
   total_t.stop();
+
+  chan.close();
+  compact_thread.join();
+
   
-  while( pools.size() >= 2 ){
-    cout<<"pools.size() "<<pools.size()<<endl;
-    entry_pool a = pools.front();
-    pools.pop_front();
-    entry_pool b = pools.front();
-    pools.pop_front();
-
-    entry_pool::merge(a,b);
-    pools.emplace_back( move(a) );
-  }
-  cout<<"pools.size() "<<pools.size()<<endl;
-
   cout<<endl;
   cout<< setw(10) << "time taken reading file "<< setw(10) << total_t.getTime() << endl;
 
 
-  return pools.front();
+  return out;
 }
 
 uvector<uint64_t> getTests( size_t const testSize){
