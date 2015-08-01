@@ -24,11 +24,7 @@
 #if ZWP_USE_BOOST
   #include <boost/iostreams/device/mapped_file.hpp>
 #else
-  #include <unistd.h>
-  #include <sys/types.h>
-  #include <sys/stat.h>
-  #include <fcntl.h>
-  #include <sys/mman.h>
+  #include "MappedFile.h"
 #endif
 
 
@@ -129,44 +125,6 @@ entry_pool fun (char const * const beg, char const * const end ){
 }
 
 #if ! ZWP_USE_BOOST
-struct MappedFile{
-  char * start;
-  struct stat sb;
-
-  MappedFile(const string &s){
-    int fd = open( s.c_str(), O_RDONLY);
-
-    if (fstat (fd, &sb) == -1) {
-      perror ("fstat");
-      throw("fstat");
-    }
-    if (!S_ISREG (sb.st_mode)) {
-      throw("not a file");
-    }
-    start = (char*) mmap (0, sb.st_size, PROT_READ, MAP_SHARED, fd, 0);
-    if (start == MAP_FAILED) {
-      perror ("mmap");
-      throw("map failed");
-    }
-    if (close (fd) == -1) {
-      perror ("close");
-      throw("close failed");
-    }
-  }
-
-  size_t size() const {
-    return sb.st_size;
-  }
-
-  char * data() const {
-    return start;
-  }
-
-  ~MappedFile(){
-    munmap(start, size() );
-  }
-
-};
 #endif 
 
 entry_pool read( const string &fname){

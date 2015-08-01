@@ -7,7 +7,7 @@
 #include <chrono>
 #include <omp.h>
 #include <array>
-#include <boost/iostreams/device/mapped_file.hpp>
+
 #include <future>
 #include <assert.h>
 
