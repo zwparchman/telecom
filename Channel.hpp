@@ -1,73 +1,72 @@
-
 #ifndef  Channel_INC
 #define  Channel_INC
-
 
 #include <list>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 
+template<class T>
+struct Channel {
 
 
-template<class item>
-class channel {
-private:
-  std::list<item> queue;
-  std::mutex m;
+  std::list<T> lst;
+  mutable std::mutex m;
   std::condition_variable cv;
-  bool closed;
-public:
-  channel() : closed(false) { }
+  bool closed=false;
 
-  channel(channel &) = delete;
-  channel operator=(channel &) = delete;
+  //deleted due to condition_variable having it deleted
+  Channel operator=(Channel &) = delete;
 
+  void put(const T &i) {
+    std::unique_lock<std::mutex> lock(m);
+    if(closed){
+      throw std::logic_error("Channel closed. Can not put");
+    }
 
+    lst.push_back(i);
+    cv.notify_one();
+  }
+
+  void emplace( const T &&i){
+    std::unique_lock<std::mutex> lock(m);
+    if(closed){
+      throw std::logic_error("Channel closed. Can not emplace");
+    }
+    lst.emplace_back(i);
+    cv.notify_one();
+  }
+
+  
+  bool get(T &out, bool wait = true) {
+    std::unique_lock<std::mutex> lock(m);
+
+    if(wait){
+      cv.wait(lock, [&](){ return closed || !lst.empty(); });
+    }
+    if(lst.empty()) return false; 
+
+    out = std::move(lst.front());
+
+    lst.pop_front();
+    return true;
+  }
+
+  size_t size() const{
+    std::unique_lock<std::mutex> lock(m);
+    return lst.size();
+  }
 
   void close() {
     std::unique_lock<std::mutex> lock(m);
     closed = true;
     cv.notify_all();
   }
-  bool is_closed() {
+
+  bool is_closed() const {
     std::unique_lock<std::mutex> lock(m);
     return closed;
   }
-  void put(const item &i) {
-    std::unique_lock<std::mutex> lock(m);
-    if(closed)
-      throw std::logic_error("put to closed channel");
-    queue.push_back(i);
-    cv.notify_one();
-  }
 
-  void emplace( const item &&i){
-    std::unique_lock<std::mutex> lock(m);
-    if(closed){
-      throw std::logic_error("emplace to a closed channel");
-    }
-    queue.emplace_back(i);
-    cv.notify_one();
-  }
-
-  size_t size(){
-    std::unique_lock<std::mutex> lock(m);
-    return queue.size();
-  }
-
-  bool get(item &out, bool wait = true) {
-    std::unique_lock<std::mutex> lock(m);
-    if(wait)
-      cv.wait(lock, [&](){ return closed || !queue.empty(); });
-    if(queue.empty())
-      return false;
-    out = queue.front();
-    queue.pop_front();
-    return true;
-  }
 };
-
-
-
 #endif   /* ----- #ifndef Channel_INC  ----- */

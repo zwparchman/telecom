@@ -1,7 +1,7 @@
+#include <algorithm>
 #include <assert.h>
 #include <bitset>
-#include <future>
-#include <algorithm>
+#include "Channel.hpp"
 #include <ctype.h>
 #include "entry_pool.h"
 #include <exception>
@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <iostream>
 #include <list>
+#include "MappedFile.h"
 #include <mutex>
 #include "omp.h"
 #include <parallel/algorithm>
@@ -20,9 +21,6 @@
 #include <unordered_set>
 #include "uvector.h"
 #include <vector>
-#include "Channel.hpp"
-#include "MappedFile.h"
-
 
 const uint64_t max_phone_number=9'999'999'999;
 
@@ -30,7 +28,7 @@ using namespace std;
 using ao::uvector;
 
 
-void compact( channel<entry_pool> *c, entry_pool *e ){
+void compact( Channel<entry_pool> *c, entry_pool *e ){
   entry_pool a(0);
 
   list<entry_pool> pools;
@@ -185,7 +183,7 @@ entry_pool read( const string &fname){
   cur++;
 
   entry_pool out(0);
-  channel<entry_pool> chan;
+  Channel<entry_pool> chan;
   thread compact_thread( compact, &chan, &out);
 
 
