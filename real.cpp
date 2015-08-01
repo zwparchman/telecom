@@ -1,7 +1,7 @@
+#include <assert.h>
 #include <bitset>
 #include <future>
 #include <algorithm>
-#include <boost/iostreams/device/mapped_file.hpp>
 #include <ctype.h>
 #include "entry_pool.h"
 #include <exception>
@@ -20,6 +20,17 @@
 #include <unordered_set>
 #include "uvector.h"
 #include <vector>
+
+#if ZWP_USE_BOOST
+  #include <boost/iostreams/device/mapped_file.hpp>
+#else
+  #include <unistd.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #include <fcntl.h>
+  #include <sys/mman.h>
+#endif
+
 
 const uint64_t max_phone_number=9'999'999'999;
 
@@ -117,6 +128,46 @@ entry_pool fun (char const * const beg, char const * const end ){
   return ret;
 }
 
+#if ! ZWP_USE_BOOST
+struct MappedFile{
+  char * start;
+  struct stat sb;
+
+  MappedFile(const string &s){
+    int fd = open( s.c_str(), O_RDONLY);
+
+    if (fstat (fd, &sb) == -1) {
+      perror ("fstat");
+      throw("fstat");
+    }
+    if (!S_ISREG (sb.st_mode)) {
+      throw("not a file");
+    }
+    start = (char*) mmap (0, sb.st_size, PROT_READ, MAP_SHARED, fd, 0);
+    if (start == MAP_FAILED) {
+      perror ("mmap");
+      throw("map failed");
+    }
+    if (close (fd) == -1) {
+      perror ("close");
+      throw("close failed");
+    }
+  }
+
+  size_t size() const {
+    return sb.st_size;
+  }
+
+  char * data() const {
+    return start;
+  }
+
+  ~MappedFile(){
+    munmap(start, size() );
+  }
+
+};
+#endif 
 
 entry_pool read( const string &fname){
   uvector<uint64_t> ret;
@@ -124,12 +175,17 @@ entry_pool read( const string &fname){
   Timer total_t;
   total_t.start();
 
-  boost::iostreams::mapped_file file(fname);
 
   list<future<entry_pool> > futs;
 
+#if ZWP_USE_BOOST
+  boost::iostreams::mapped_file file(fname);
+#else
+  MappedFile file (fname);
+#endif
   char const * cur = file.data();
   char const * const end = cur + file.size();
+
   size_t chunckSize= 100'000'000;
 
   //skip to past first newline
@@ -137,6 +193,7 @@ entry_pool read( const string &fname){
   cur++;
 
   list<entry_pool> pools;
+  future<entry_pool> merger;
 
   size_t maxRunning = 8;
 
