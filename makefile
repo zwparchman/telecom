@@ -21,7 +21,7 @@ gen: ./generate.cpp
 	g++ generate.cpp -g -o gen -fopenmp --std=c++14
 
 real : real.o entry_pool.o Timer.o MappedFile.o
-	$(CC) $(Std) $(LFLAGS) real.o Timer.o entry_pool.o MappedFile.o -o real -lboost_iostreams
+	$(CC) $(Std) $(LFLAGS) real.o Timer.o entry_pool.o MappedFile.o -o real 
 
 real.o : real.cpp entry_pool.h 
 	$(CC) $(CFLAGS) $<
