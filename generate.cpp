@@ -7,9 +7,10 @@
 #include <chrono>
 #include <omp.h>
 #include <array>
-
+#include <algorithm>
 #include <future>
 #include <assert.h>
+#include "Channel.hpp"
 
 using namespace std;
 
@@ -62,15 +63,23 @@ string to_string( const entry & e){
   return ret;
 }
 
-vector<string> fun(mt19937_64 mt, size_t todo ){
-  vector<string> v;
-  for( size_t ii=0; ii<todo; ii++){
-    string s;
-    s.reserve(1024);
-    s= to_string( entry(mt) ) + "\n";
-    v.emplace_back( move(s) );
+void fun(mt19937_64 mt, Channel<size_t> *in, Channel<vector<string>> *out){
+  size_t todo ;
+  while(true){
+    if( ! in->get( todo ) ){
+      return;
+    }
+    vector<string> v;
+    v.reserve(todo);
+    for( size_t ii=0; ii<todo; ii++){
+      string s;
+      s.reserve(1024);
+      s= to_string( entry(mt) ) + "\n";
+      v.emplace_back( move(s) );
+    }
+
+    out->emplace(move(v));
   }
-  return v;
 }
 
 int main(int argc, char* argv[] ){
@@ -79,39 +88,44 @@ int main(int argc, char* argv[] ){
     size=atoi(argv[1]);
   }
 
-  // obtain a seed from the system clock:
-  //unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-  
-  const int threads=100;
-  assert( size % threads == 0 );
-
   ofstream file("dump");
 
-  int count=0;
-  list< future<vector<string>>> futs;
-  for( int i=0; i<8; i++ ){
+  const int number_of_workers=8;
+  array<thread,number_of_workers> workers;
+  Channel<uint64_t> in;
+  Channel<vector<string>> out;
+
+  for( int i=0; i<number_of_workers; i++){
     mt19937_64 mer;
-    mer.seed(count++);
-    futs.push_back( async( launch::async, fun, mer, size/threads));
+    mer.seed(i);
+    workers[i] = thread( fun, mer, &in, &out);
+    workers[i].detach();
   }
 
-  int ccount =0;
-
   file<<"\"Service Area Code\",\"Phone Numbers\",\"Preferences\",\"Opstype\",\"Phone Type\""<<endl;
-  while( futs.size() > 0 ){
-    auto v = futs.front().get();
-    futs.pop_front();
-    cerr<<"got future "<<ccount++<<endl;
 
-    if( count < threads ){
-      mt19937_64 mer;
-      mer.seed(count++);
-      futs.push_back( async( launch::async, fun, mer, size/threads));
-    }
-    for( auto &s : v ){
+  const int step=500000;
+  int cout_in=0;
+  while(size > 0){
+    int toget = step;
+    if( step > size ) toget = size;
+    in.put(toget);
+    size -= step;
+    cout_in++;
+  }
+  in.close();
+
+  for( int i=0; i<cout_in; i++){
+    cout<<"count_in: "<<cout_in--<<endl;
+    vector<string> v;
+    out.get(v);
+
+    for( const auto &s : v){
       file<<s;
     }
   }
+
+  } 
 
 
   return 0;
