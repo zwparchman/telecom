@@ -124,9 +124,5 @@ int main(int argc, char* argv[] ){
       file<<s;
     }
   }
-
-  } 
-
-
   return 0;
 }

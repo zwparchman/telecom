@@ -6,7 +6,6 @@
 #include "entry_pool.h"
 #include <exception>
 #include <fstream>
-#include <future>
 #include <iomanip>
 #include <iostream>
 #include <list>
@@ -35,16 +34,16 @@ void compact( Channel<entry_pool> *c, entry_pool *e ){
 
   int count=0;
 
-  auto mergeStep = [&](){
-    if( pools.size() > 1){
-      entry_pool x = pools.front();
-      pools.pop_front();
-      entry_pool y = pools.front();
-      pools.pop_front();
+  auto mergeStep = [&](list<entry_pool> &lst){
+    if( lst.size() > 1){
+      entry_pool x = lst.front();
+      lst.pop_front();
+      entry_pool y = lst.front();
+      lst.pop_front();
 
       entry_pool::merge(x,y);
       cout<<"merge "<<++count<<endl;
-      pools.emplace_back(move(x));
+      lst.emplace_back(move(x));
     }
   };
 
@@ -52,18 +51,21 @@ void compact( Channel<entry_pool> *c, entry_pool *e ){
     /* empty the channel */
     {
       entry_pool b(0);
+      list<entry_pool> smallpool;
       while( c->get(a,false)){
-        entry_pool::merge(b,a);
+        smallpool.emplace_back(move(a));
+        mergeStep(smallpool);
       }
+
       if( b.size() > 0){
         pools.emplace_back(move(b));
       }
     }
-    mergeStep();
+    mergeStep(pools);
   }
 
   while( pools.size() > 1 ){
-    mergeStep();
+    mergeStep(pools);
   }
 
   *e = move(pools.front());
@@ -118,48 +120,60 @@ uint8_t read_prefrences( char const * beg, char const ** out){
   return ret;
 }
 
-entry_pool fun (char const * const beg, char const * const end ){
-  entry_pool ret( (end-beg)/ 20 );
-  char const * cur = beg;
-  while( cur < end ){
-    //"Service Area Code","Phone Numbers","Preferences","Opstype","Phone Type"
-    assert(*cur == '\"');
-    cur+=1;
-    char const * temp = beg;
-    uint8_t service = my_strto_int<uint8_t>( cur, &temp);
-    assert(cur != temp);
-    assert(temp[0] == '\"');
-    assert(temp[1] == ',');
-    assert(temp[2] == '\"');
-    cur = temp+3;
-    uint64_t phoneNumber = my_strto_int<uint64_t>( cur, &temp);
-    assert(cur != temp);
-    assert(temp[0] == '\"');
-    assert(temp[1] == ',');
-    assert(temp[2] == '\"');
-    cur = temp+3;
-    uint8_t preferences = read_prefrences(cur, &temp);
-    assert(cur != temp);
-    assert(temp[0] == '\"');
-    assert(temp[1] == ',');
-    assert(temp[2] == '\"');
+void fun (Channel<pair<char const *,char const *> > *in, Channel<entry_pool> *out){
+  while(true){
+    pair<char const *,char const *> set;
+    if( ! in->get(set) ) return;
+    char const * const beg = set.first;
+    char const * const end = set.second;
 
-    cur = temp+3;
-    char opstype = *cur;
-    assert(cur[0] == 'A' || cur[0] == 'D');
-    assert(cur[1] == '\"');
-    assert(cur[2] == ',');
-    assert(cur[3] == '\"');
+    assert(*beg);
+    assert(*end);
 
-    cur += 4;
-    uint8_t phonetype = my_strto_int<uint8_t>( cur, &temp);
-    assert(cur != temp);
-    assert(temp[0] == '\"');
-    assert(temp[1] == '\n');
-    cur = temp+2;
-    ret.add(phoneNumber, service, preferences, opstype, phonetype);
+    assert( beg < end );
+
+    entry_pool ret( (end-beg)/ 20 );
+    char const * cur = beg;
+    while( cur < end ){
+      //"Service Area Code","Phone Numbers","Preferences","Opstype","Phone Type"
+      assert(*cur == '\"');
+      cur+=1;
+      char const * temp = cur;
+      uint8_t service = my_strto_int<uint8_t>( cur, &temp);
+      assert(cur != temp);
+      assert(temp[0] == '\"');
+      assert(temp[1] == ',');
+      assert(temp[2] == '\"');
+      cur = temp+3;
+      uint64_t phoneNumber = my_strto_int<uint64_t>( cur, &temp);
+      assert(cur != temp);
+      assert(temp[0] == '\"');
+      assert(temp[1] == ',');
+      assert(temp[2] == '\"');
+      cur = temp+3;
+      uint8_t preferences = read_prefrences(cur, &temp);
+      assert(cur != temp);
+      assert(temp[0] == '\"');
+      assert(temp[1] == ',');
+      assert(temp[2] == '\"');
+
+      cur = temp+3;
+      char opstype = *cur;
+      assert(cur[0] == 'A' || cur[0] == 'D');
+      assert(cur[1] == '\"');
+      assert(cur[2] == ',');
+      assert(cur[3] == '\"');
+
+      cur += 4;
+      uint8_t phonetype = my_strto_int<uint8_t>( cur, &temp);
+      assert(cur != temp);
+      assert(temp[0] == '\"');
+      assert(temp[1] == '\n');
+      cur = temp+2;
+      ret.add(phoneNumber, service, preferences, opstype, phonetype);
+    }
+    out->emplace( move(ret));
   }
-  return ret;
 }
 
 entry_pool read( const string &fname){
@@ -168,8 +182,6 @@ entry_pool read( const string &fname){
   Timer total_t;
   total_t.start();
 
-
-  list<future<entry_pool> > futs;
 
   MappedFile file (fname);
 
@@ -183,11 +195,17 @@ entry_pool read( const string &fname){
   cur++;
 
   entry_pool out(0);
+  Channel<pair<const char*, const char*>> position;
   Channel<entry_pool> chan;
   thread compact_thread( compact, &chan, &out);
 
 
-  size_t maxRunning = 8;
+  const size_t maxRunning = 8;
+  array<thread, maxRunning> threads;
+
+  for( auto &t : threads){
+    t = thread( fun, &position, &chan);
+  }
 
   while( cur < end ){
     if( *cur == '\n' ){ cur++; continue;}
@@ -201,22 +219,18 @@ entry_pool read( const string &fname){
       cerr<<"error temp==cur"<<endl;
       cur++;
     } else {
-      futs.emplace_back( async( launch::async, fun, cur, temp));
+      assert(*cur); //ensure they are readable
+      assert(*temp); //ensure they are readable
+      position.emplace( make_pair(cur,temp));
       cur=temp;
     }
-    if( futs.size() >= maxRunning ){
-      entry_pool a = futs.front().get();
-      futs.pop_front();
-      chan.emplace( move(a) );
-    }
+  }
+  position.close();
+
+  for( auto &t : threads){
+    t.join();
   }
 
-  while( futs.size() > 0 ){
-    cout<<"futs.size() "<<futs.size()<<endl;
-    entry_pool a = futs.front().get();
-    futs.pop_front();
-    chan.emplace( move(a) );
-  }
   total_t.stop();
 
   chan.close();
