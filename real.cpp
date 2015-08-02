@@ -47,18 +47,19 @@ void compact( Channel<entry_pool> *c, entry_pool *e ){
     }
   };
 
+
   while( c->size() || (!c->is_closed()) ){
     /* empty the channel */
     {
-      entry_pool b(0);
       list<entry_pool> smallpool;
       while( c->get(a,false)){
         smallpool.emplace_back(move(a));
         mergeStep(smallpool);
       }
 
-      if( b.size() > 0){
-        pools.emplace_back(move(b));
+      if( smallpool.front().size() > 0){
+        pools.emplace_back(move(smallpool.front()));
+        smallpool.pop_front();
       }
     }
     mergeStep(pools);
