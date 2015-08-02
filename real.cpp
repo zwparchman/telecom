@@ -54,6 +54,9 @@ void compact( Channel<entry_pool> *c, entry_pool *e ){
       list<entry_pool> smallpool;
       while( c->get(a,false)){
         smallpool.emplace_back(move(a));
+      }
+
+      while( smallpool.size() > 1){
         mergeStep(smallpool);
       }
 
@@ -173,6 +176,7 @@ void fun (Channel<pair<char const *,char const *> > *in, Channel<entry_pool> *ou
       cur = temp+2;
       ret.add(phoneNumber, service, preferences, opstype, phonetype);
     }
+    ret.self_sort();
     out->emplace( move(ret));
   }
 }
@@ -189,7 +193,7 @@ entry_pool read( const string &fname){
   char const * cur = file.data();
   char const * const end = cur + file.size();
 
-  size_t chunckSize= 100'000'000;
+  size_t chunckSize= 1'000'000'000;
 
   //skip to past first newline
   for( ; *cur != '\n'; cur++);
@@ -201,7 +205,7 @@ entry_pool read( const string &fname){
   thread compact_thread( compact, &chan, &out);
 
 
-  const size_t maxRunning = 8;
+  const size_t maxRunning = 24;
   array<thread, maxRunning> threads;
 
   for( auto &t : threads){
@@ -231,6 +235,7 @@ entry_pool read( const string &fname){
   for( auto &t : threads){
     t.join();
   }
+  cout<<"Joined worker threads"<<endl;
 
   total_t.stop();
 
