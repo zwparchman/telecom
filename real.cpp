@@ -193,7 +193,7 @@ entry_pool read( const string &fname){
   char const * cur = file.data();
   char const * const end = cur + file.size();
 
-  size_t chunckSize= 1'000'000'000;
+  size_t chunckSize= 10'000'000;
 
   //skip to past first newline
   for( ; *cur != '\n'; cur++);
@@ -204,8 +204,10 @@ entry_pool read( const string &fname){
   Channel<entry_pool> chan;
   thread compact_thread( compact, &chan, &out);
 
+  chunckSize *= 1.05;
 
-  const size_t maxRunning = 24;
+
+  const size_t maxRunning = 8;
   array<thread, maxRunning> threads;
 
   for( auto &t : threads){
@@ -215,6 +217,7 @@ entry_pool read( const string &fname){
   while( cur < end ){
     if( *cur == '\n' ){ cur++; continue;}
     char const * temp = cur + chunckSize;
+
     temp = min(temp, end);
 
     temp=lineBountry(cur, temp);

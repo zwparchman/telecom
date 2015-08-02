@@ -1,7 +1,7 @@
 #include <string.h>
 int main(){
   while(true){
-    int * ints = new int[1024];
-    memset( ints, 0, 1024);
+    int * ints = new int[4096];
+    ints[2048] = 0;
   }
 }
