@@ -9,7 +9,7 @@
 #include <iomanip>
 #include <iostream>
 #include <list>
-#include "MappedFile.h"
+#include "MappedFile.hpp"
 #include <mutex>
 #include "omp.h"
 #include <parallel/algorithm>

@@ -12,7 +12,10 @@ PROG=./real
 
 .PHONY:clean 
 
-Objects= Timer.o entry_pool.o MappedFile.o
+Objects1= Timer.o entry_pool.o 
+Objects2= MappedFile.o
+Objects3= real.o
+Objects= $(Objects1) $(Objects2) $(Objects3)
 
 all : $(Objects) gen eatram real
 
@@ -22,14 +25,20 @@ eatram : eatram.cpp
 gen: ./generate.cpp
 	g++ generate.cpp -g -o gen -fopenmp --std=c++14
 
-real : real.o entry_pool.o Timer.o MappedFile.o
+real : real.o MappedFile.o entry_pool.o Timer.o
 	$(CC) $(Std) $(LFLAGS) real.o Timer.o entry_pool.o MappedFile.o -o real $(BOOST_LIBS)
 
-real.o : real.cpp entry_pool.h 
+MappedFile.o: MappedFile.cpp MappedFile.hpp
 	$(CC) $(CFLAGS) $<
 
-$(Objects): %.o: %.cpp %.h
-	$(CC) $(CFLAGS) $<
+entry_pool.o: entry_pool.h entry_pool.cpp
+	$(CC) $(CFLAGS) entry_pool.cpp
+
+Timer.o: Timer.h Timer.cpp
+	$(CC) $(CFLAGS) Timer.cpp
+
+real.o : real.cpp  entry_pool.h
+	$(CC) $(CFLAGS) real.cpp
 
 dbg: $(PROG)
 	gdb $(PROG)
