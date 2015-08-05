@@ -110,7 +110,11 @@ int main(int argc, char* argv[] ){
     int toget = step;
     if( step > size ) toget = size;
     in.put(toget);
-    size -= step;
+    {
+      size_t oldsize = size;
+      size -= step;
+      if( oldsize < size ) size=0; //prevent underflow
+    }
     cout_in++;
   }
   in.close();
